@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Track Your Package</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="container" style="text-align: center;">
+      <img src="/logo.png" alt="Company Logo" onclick="window.location.href='/'">
+    </div>
+  </header>
+
+  <div class="container" style="flex: 1;">
+    <div class="glass track-box">
+      <h1 style="margin-bottom: 20px;">Track Your Shipment</h1>
+      <input type="text" id="trackingInput" placeholder="Enter tracking number">
+      <button onclick="trackPackage()" style="width: 100%;">Track</button>
+      <div id="trackResult"></div>
+    </div>
+  </div>
+
+  <footer id="footer">
+    <div>Loading support contacts...</div>
+  </footer>
+
+<script>
+async function trackPackage() {
+  const num = document.getElementById('trackingInput').value.trim();
+  const resultDiv = document.getElementById('trackResult');
+  if (!num) return resultDiv.innerHTML = '<div class="status-item" style="color:#ef4444;">Enter a tracking number</div>';
+  
+  resultDiv.innerHTML = '<div class="status-item">Searching cluster database...</div>';
+  
+  try {
+    const res = await fetch(`/track/${num}`);
+    if (res.status === 404) return resultDiv.innerHTML = '<div class="status-item" style="color:#ef4444;">Tracking number not found</div>';
+    
+    const data = await res.json();
+    let html = `<div class="status-item"><strong>Tracking Code:</strong> ${data.trackingNumber}</div>`;
+    html += `<div class="status-item"><strong>Customer Profile:</strong> ${data.customerName}</div>`;
+    html += `<div class="status-item"><strong>Current Status:</strong> ${data.status}</div>`;
+    html += `<div class="status-item"><strong>Current Location:</strong> ${data.location}</div>`;
+    
+    if (data.origin) html += `<div class="status-item"><strong>Package Leaving From (Origin):</strong> ${data.origin}</div>`;
+    if (data.destination) html += `<div class="status-item"><strong>Package Destination:</strong> ${data.destination}</div>`;
+    if (data.transitMode) html += `<div class="status-item"><strong>Transportation Method:</strong> ${data.transitMode}</div>`;
+    
+    if (data.history && data.history.length) {
+      html += '<h3 style="margin: 25px 0 10px 0; font-size: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 5px;">Transit Checkpoint Logs</h3>';
+      [...data.history].reverse().forEach(h => {
+        html += `<div class="status-item" style="font-size: 14px; background: rgba(0,0,0,0.4); border-left: 3px solid #3b82f6;">
+          <strong>${new Date(h.date).toLocaleString()}</strong> — ${h.status} (${h.location})
+        </div>`;
+      });
+    }
+    resultDiv.innerHTML = html;
+  } catch(err) {
+    resultDiv.innerHTML = '<div class="status-item" style="color:#ef4444;">Network connection failed.</div>';
+  }
+}
+
+async function loadFooter() {
+  try {
+    const res = await fetch('/settings/public');
+    const data = await res.json();
+    
+    document.getElementById('footer').innerHTML = `
+      <div style="margin-bottom:8px;">Email Enquiries: <a href="mailto:${data.contactEmail}">${data.contactEmail}</a></div>
+      <div>WhatsApp Support: <a href="https://wa.me/${data.whatsappNumber.replace(/[^0-9]/g,'')}" target="_blank">${data.whatsappNumber}</a></div>
+    `;
+    
+    if (data.chatScriptUrl && data.chatScriptUrl.trim() !== '') {
+      const scriptTag = document.createElement('script');
+      scriptTag.src = data.chatScriptUrl.trim();
+      scriptTag.charset = 'UTF-8';
+      scriptTag.setAttribute('crossorigin', '*');
+      scriptTag.async = true;
+      document.body.appendChild(scriptTag);
+    }
+  } catch (err) {
+    console.error("Error connecting to settings endpoints:", err);
+  }
+}
+loadFooter();
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Authentication</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="login-box">
+    <h1 style="text-align: center; margin-bottom: 25px; font-size: 1.8rem;">Admin System</h1>
+    <input type="password" id="password" placeholder="Enter System Password" style="margin-bottom: 20px;">
+    <button onclick="login()" style="width: 100%; margin-left: 0;">Authenticate</button>
+    <div id="error" style="color: #ef4444; text-align: center; margin-top: 15px; font-size: 14px; font-weight: 600;"></div>
+  </div>
+
+<script>
+async function login() {
+  const password = document.getElementById('password').value;
+  const errorDiv = document.getElementById('error');
+  errorDiv.innerText = 'Verifying...';
+
+  try {
+    const res = await fetch('/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    
+    if (res.ok) {
+      window.location.href = '/admin/shipments-page';
+    } else {
+      errorDiv.innerText = 'Invalid system access keys.';
+    }
+  } catch(err) {
+    errorDiv.innerText = 'Server connection error.';
+  }
+}
+</script>
+</body>
+</html>

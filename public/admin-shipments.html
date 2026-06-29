@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Control Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="container">
+    
+    <div class="glass top-bar" style="padding: 20px 30px; margin-bottom: 20px;">
+        <h1 style="margin: 0; font-size: 1.6rem;">Dashboard Control Hub</h1>
+        <button class="logout-btn" onclick="logout()" style="margin: 0;">Logout</button>
+    </div>
+
+    <div class="glass">
+      <h2 style="font-size: 1.3rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">Create New Shipment</h2>
+      <div class="settings-grid">
+        <div class="form-group">
+          <label>Tracking Reference Number</label>
+          <input type="text" id="shipTrackingNumber" placeholder="e.g., LTP-88204">
+        </div>
+        <div class="form-group">
+          <label>Customer Full Name</label>
+          <input type="text" id="shipCustomerName" placeholder="Recipient account identifier">
+        </div>
+        <div class="form-group">
+          <label>Package Leaving From (Origin Location)</label>
+          <input type="text" id="shipOrigin" placeholder="e.g., Paris Logistics Hub, France">
+        </div>
+        <div class="form-group">
+          <label>Package Final Destination</label>
+          <input type="text" id="shipDestination" placeholder="e.g., Bamenda Terminal, Cameroon">
+        </div>
+        <div class="form-group">
+          <label>Transportation Method</label>
+          <select id="shipTransitMode">
+            <option value="By Car / Ground Freight">🚗 By Car / Ground Freight</option>
+            <option value="By Air Freight Cargo">✈️ By Air Freight Cargo</option>
+            <option value="By Sea Shipping Container">🚢 By Sea Shipping Container</option>
+            <option value="By Rail Freight Express">🚂 By Rail Freight Express</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Current Status</label>
+          <select id="shipStatus">
+            <option value="Pending">⏳ Pending Hub Assignment</option>
+            <option value="In Transit">🚚 In Route / Transit</option>
+            <option value="Out for Delivery">📦 Dispatched for Local Delivery</option>
+            <option value="Delivered">✅ Handed Over / Delivered</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>Current Logged Location Facility</label>
+          <input type="text" id="shipLocation" placeholder="e.g., International Sort Facility Airport Depot">
+        </div>
+      </div>
+      <button onclick="createShipment()">Save Tracking Entry</button>
+      <div id="shipmentMsg" style="margin-top: 15px; color: #4ade80; font-weight: 600;"></div>
+    </div>
+
+    <div class="glass">
+      <h2 style="font-size: 1.3rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">System Global Configurations</h2>
+      <div class="settings-grid">
+        <div class="form-group">
+          <label>Contact Email Address</label>
+          <input type="email" id="contactEmail" placeholder="support@domain.com">
+        </div>
+        <div class="form-group">
+          <label>WhatsApp Number Hotline</label>
+          <input type="text" id="whatsappNumber" placeholder="+1234567890">
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>Tawk.to Chat Widget Embed URL</label>
+          <input type="text" id="chatScriptUrl" placeholder="https://embed.tawk.to/xxxxxxxxxxxxxxxxxxxxxxxx/default">
+        </div>
+      </div>
+      <button onclick="saveSettings()">Save Configuration</button>
+      <div id="settingsMsg" style="margin-top: 15px; color: #4ade80; font-weight: 600;"></div>
+    </div>
+
+    <div class="glass" style="overflow-x: auto;">
+      <h2 style="font-size: 1.3rem; margin-bottom: 15px;">Shipment Archive Records</h2>
+      <input type="text" id="search" placeholder="Type to filter tracking numbers or user profiles..." onkeyup="loadShipments()" style="margin-bottom: 20px;">
+      
+      <table id="shipmentsTable">
+        <thead>
+          <tr>
+            <th>Tracking Code</th>
+            <th>Customer Account</th>
+            <th>Status Checkpoint</th>
+            <th>Date Registered</th>
+            <th>Management Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+// Authentication Security Feature added here
+async function logout() {
+  try {
+    await fetch('/admin/logout', { method: 'POST' });
+    window.location.href = '/admin';
+  } catch (err) {
+    console.error('Logout error:', err);
+  }
+}
+
+async function loadSettings() {
+  const res = await fetch('/admin/settings');
+  if (res.status === 401) return window.location.href = '/admin';
+  const data = await res.json();
+  document.getElementById('contactEmail').value = data.contactEmail || '';
+  document.getElementById('whatsappNumber').value = data.whatsappNumber || '';
+  document.getElementById('chatScriptUrl').value = data.chatScriptUrl || '';
+}
+
+async function saveSettings() {
+  const contactEmail = document.getElementById('contactEmail').value.trim();
+  const whatsappNumber = document.getElementById('whatsappNumber').value.trim();
+  const chatScriptUrl = document.getElementById('chatScriptUrl').value.trim();
+  
+  const res = await fetch('/admin/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contactEmail, whatsappNumber, chatScriptUrl })
+  });
+  if (res.ok) {
+    document.getElementById('settingsMsg').innerText = 'System configurations updated and locked!';
+    setTimeout(() => document.getElementById('settingsMsg').innerText = '', 3000);
+  }
+}
+
+async function createShipment() {
+  const trackingNumber = document.getElementById('shipTrackingNumber').value.trim();
+  const customerName = document.getElementById('shipCustomerName').value.trim();
+  const origin = document.getElementById('shipOrigin').value.trim();
+  const destination = document.getElementById('shipDestination').value.trim();
+  const transitMode = document.getElementById('shipTransitMode').value;
+  const status = document.getElementById('shipStatus').value;
+  const location = document.getElementById('shipLocation').value.trim();
+
+  if (!trackingNumber || !customerName) {
+    alert("Please completely fill out Tracking Code and Customer Name inputs.");
+    return;
+  }
+
+  const payload = {
+    trackingNumber, customerName, origin, destination, transitMode, status, location,
+    history: [{ status, location }]
+  };
+
+  const res = await fetch('/admin/shipments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (res.ok) {
+    document.getElementById('shipmentMsg').innerText = `✅ Entry [${trackingNumber}] written cleanly to cluster database!`;
+    document.getElementById('shipTrackingNumber').value = '';
+    document.getElementById('shipCustomerName').value = '';
+    document.getElementById('shipOrigin').value = '';
+    document.getElementById('shipDestination').value = '';
+    document.getElementById('shipLocation').value = '';
+    loadShipments();
+    setTimeout(() => document.getElementById('shipmentMsg').innerText = '', 3000);
+  } else {
+    const errorData = await res.json();
+    alert(errorData.error || "Database transmission communication drop error.");
+  }
+}
+
+async function loadShipments() {
+  const q = document.getElementById('search').value;
+  const res = await fetch(`/admin/shipments?q=${q}`);
+  if (res.status === 401) return window.location.href = '/admin';
+  const data = await res.json();
+  const tbody = document.querySelector('#shipmentsTable tbody');
+  tbody.innerHTML = '';
+  
+  if(data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #cbd5e1;">No archive records match your search.</td></tr>';
+      return;
+  }
+
+  data.forEach(s => {
+    tbody.innerHTML += `
+      <tr>
+        <td style="font-weight:600; color: #60a5fa;">${s.trackingNumber}</td>
+        <td>${s.customerName}</td>
+        <td><span style="font-size:13px; background:rgba(0,0,0,0.3); padding:6px 10px; border-radius:6px; border: 1px solid rgba(255,255,255,0.1);">${s.status}</span></td>
+        <td>${new Date(s.createdAt).toLocaleDateString()}</td>
+        <td><button class="delete-btn" onclick="deleteShipment('${s._id}', '${s.trackingNumber}')">Delete</button></td>
+      </tr>
+    `;
+  });
+}
+
+async function deleteShipment(id, trackingNumber) {
+  if (!confirm(`Purge profile #${trackingNumber} completely?`)) return;
+  await fetch(`/admin/shipments/${id}`, { method: 'DELETE' });
+  loadShipments();
+}
+
+loadSettings();
+loadShipments();
+</script>
+</body>
+</html>
