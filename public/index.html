@@ -2,65 +2,201 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Track Your Package</title>
+  <title>Track Your Package | LogiTrack</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Leaflet CSS Engine (Required for Map Shapes) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
   <header>
-    <div class="container" style="text-align: center;">
-      <img src="/logo.png" alt="Company Logo" onclick="window.location.href='/'">
+    <div class="container" style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+      <img src="/logo.png" alt="LogiTrack Logo" style="height: 40px; width: auto; object-fit: contain;" onerror="this.style.display='none'">
+      <h1 style="margin: 0; color: #fff; font-size: 2rem; font-weight: 800; letter-spacing: -0.03em;">LogiTrack</h1>
     </div>
   </header>
 
-  <div class="container" style="flex: 1;">
+  <div class="container" style="flex: 1; padding-top: 20px;">
+    
+    <div class="scrolling-showcase-container">
+        <img src="/image1.png" alt="Air Freight Services" class="scroll-showcase-img" onerror="this.style.display='none'">
+        <img src="/image2.png" alt="Ocean Freight Capabilities" class="scroll-showcase-img" onerror="this.style.display='none'">
+        <img src="/image3.png" alt="Road Logistics Tracking" class="scroll-showcase-img" onerror="this.style.display='none'">
+        <img src="/image4.png" alt="Global Warehousing" class="scroll-showcase-img" onerror="this.style.display='none'">
+    </div>
+
     <div class="glass track-box">
-      <h1 style="margin-bottom: 20px;">Track Your Shipment</h1>
-      <input type="text" id="trackingInput" placeholder="Enter tracking number">
-      <button onclick="trackPackage()" style="width: 100%;">Track</button>
-      <div id="trackResult"></div>
+      <h1 style="margin-bottom: 20px; font-size: 1.5rem;">Track Your Cargo</h1>
+      <input type="text" id="trackingInput" placeholder="Enter tracking number" style="text-transform: uppercase;">
+      <button onclick="trackPackage()" id="trackBtn" style="width: 100%; margin-top: 10px;">Track Shipment</button>
+      <div id="trackResultError" style="margin-top: 15px; text-align: center;"></div>
     </div>
   </div>
 
-  <footer id="footer">
+  <footer id="footer" style="margin-top: 40px; text-align: center; color: #94a3b8;">
     <div>Loading support contacts...</div>
   </footer>
 
+  <!-- FULL SCREEN DYNAMIC MODAL -->
+  <div class="tracking-modal" id="trackingModal">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeModal()">&times;</button>
+        <h2 style="margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">Tracking Details</h2>
+        
+        <img src="" alt="Package Photo" id="modal-photo" class="package-photo">
+        
+        <div class="modal-grid">
+            <div>
+                <span>Tracking Code</span>
+                <strong id="modal-tracking" style="color: #60a5fa;"></strong>
+            </div>
+            <div>
+                <span>Current Status</span>
+                <strong id="modal-status" style="color: #4ade80;"></strong>
+            </div>
+            <div>
+                <span>Customer Profile</span>
+                <strong id="modal-customer"></strong>
+            </div>
+            <div>
+                <span>Transit Mode</span>
+                <strong id="modal-transit"></strong>
+            </div>
+        </div>
+
+        <!-- Render Target Anchor Box for Leaflet Graphics -->
+        <div id="modal-map-container"></div>
+
+        <h3 style="font-size: 1.1rem; margin-top: 30px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">Logistics Checkpoints</h3>
+        <div id="modal-history" style="margin-top: 15px;"></div>
+    </div>
+  </div>
+
+<!-- Leaflet JavaScript Core Library Engine -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
 <script>
+let trackingMap = null;
+
+// Helper to resolve city names to latitude and longitude coordinates safely via internet open geocoding API
+async function getCoordinates(cityName) {
+    if (!cityName || cityName.trim() === '') return null;
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&limit=1`);
+        const data = await response.json();
+        if (data && data.length > 0) {
+            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        }
+    } catch (e) {
+        console.error("Geocoding fetch interface issue:", e);
+    }
+    return null;
+}
+
 async function trackPackage() {
   const num = document.getElementById('trackingInput').value.trim();
-  const resultDiv = document.getElementById('trackResult');
-  if (!num) return resultDiv.innerHTML = '<div class="status-item" style="color:#ef4444;">Enter a tracking number</div>';
+  const errorDiv = document.getElementById('trackResultError');
+  const btn = document.getElementById('trackBtn');
   
-  resultDiv.innerHTML = '<div class="status-item">Searching cluster database...</div>';
+  if (!num) return errorDiv.innerHTML = '<span style="color:#ef4444;">Please enter a tracking number.</span>';
+  
+  btn.innerText = 'Searching...';
+  errorDiv.innerHTML = '';
   
   try {
     const res = await fetch(`/track/${num}`);
-    if (res.status === 404) return resultDiv.innerHTML = '<div class="status-item" style="color:#ef4444;">Tracking number not found</div>';
+    btn.innerText = 'Track Shipment';
+    
+    if (res.status === 404) return errorDiv.innerHTML = '<span style="color:#ef4444;">Tracking number not found.</span>';
     
     const data = await res.json();
-    let html = `<div class="status-item"><strong>Tracking Code:</strong> ${data.trackingNumber}</div>`;
-    html += `<div class="status-item"><strong>Customer Profile:</strong> ${data.customerName}</div>`;
-    html += `<div class="status-item"><strong>Current Status:</strong> ${data.status}</div>`;
-    html += `<div class="status-item"><strong>Current Location:</strong> ${data.location}</div>`;
     
-    if (data.origin) html += `<div class="status-item"><strong>Package Leaving From (Origin):</strong> ${data.origin}</div>`;
-    if (data.destination) html += `<div class="status-item"><strong>Package Destination:</strong> ${data.destination}</div>`;
-    if (data.transitMode) html += `<div class="status-item"><strong>Transportation Method:</strong> ${data.transitMode}</div>`;
+    document.getElementById('modal-tracking').innerText = data.trackingNumber;
+    document.getElementById('modal-status').innerText = data.status;
+    document.getElementById('modal-customer').innerText = data.customerName;
+    document.getElementById('modal-transit').innerText = data.transitMode;
     
+    const photoEl = document.getElementById('modal-photo');
+    if (data.packageImage && data.packageImage.trim() !== '') {
+        photoEl.src = data.packageImage;
+        photoEl.style.display = 'block';
+    } else {
+        photoEl.style.display = 'none';
+    }
+
+    let historyHtml = '';
     if (data.history && data.history.length) {
-      html += '<h3 style="margin: 25px 0 10px 0; font-size: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 5px;">Transit Checkpoint Logs</h3>';
-      [...data.history].reverse().forEach(h => {
-        html += `<div class="status-item" style="font-size: 14px; background: rgba(0,0,0,0.4); border-left: 3px solid #3b82f6;">
-          <strong>${new Date(h.date).toLocaleString()}</strong> — ${h.status} (${h.location})
+      ([...data.history]).reverse().forEach(h => {
+        historyHtml += `<div style="font-size: 14px; background: rgba(0,0,0,0.3); border-left: 3px solid #3b82f6; padding: 12px; margin-bottom: 10px; border-radius: 6px;">
+          <strong style="color: #94a3b8;">${new Date(h.date).toLocaleString()}</strong><br>
+          <span style="color: #fff; font-weight: 500;">${h.status}</span> — ${h.location}
         </div>`;
       });
+    } else {
+        historyHtml = '<div style="color: #94a3b8;">No checkpoint history logged yet.</div>';
     }
-    resultDiv.innerHTML = html;
+    document.getElementById('modal-history').innerHTML = historyHtml;
+
+    // Show tracking information panel modal overlay container window wrapper
+    document.getElementById('trackingModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
+    // Clear previous Map instance properly to prevent re-initialization error blocks
+    if (trackingMap) {
+        trackingMap.remove();
+        trackingMap = null;
+    }
+
+    // Load active map layout visually right after window rendering executes
+    setTimeout(async () => {
+        trackingMap = L.map('modal-map-container');
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(trackingMap);
+
+        // Force viewport sizing reset routine immediately
+        trackingMap.invalidateSize();
+
+        const originCoords = await getCoordinates(data.origin);
+        const destCoords = await getCoordinates(data.destination);
+
+        if (originCoords && destCoords) {
+            L.marker(originCoords).addTo(trackingMap).bindPopup(`<b>Origin:</b><br>${data.origin}`).openPopup();
+            L.marker(destCoords).addTo(trackingMap).bindPopup(`<b>Destination:</b><br>${data.destination}`);
+            
+            const routeLine = L.polyline([originCoords, destCoords], {
+                color: '#3b82f6', 
+                weight: 4, 
+                dashArray: '10, 10'
+            }).addTo(trackingMap);
+            
+            trackingMap.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+        } else if (originCoords) {
+            trackingMap.setView(originCoords, 6);
+            L.marker(originCoords).addTo(trackingMap).bindPopup(`<b>Origin:</b><br>${data.origin}`).openPopup();
+        } else if (destCoords) {
+            trackingMap.setView(destCoords, 6);
+            L.marker(destCoords).addTo(trackingMap).bindPopup(`<b>Destination:</b><br>${data.destination}`).openPopup();
+        } else {
+            trackingMap.setView([20, 0], 2);
+        }
+    }, 300);
+    
   } catch(err) {
-    resultDiv.innerHTML = '<div class="status-item" style="color:#ef4444;">Network connection failed.</div>';
+    btn.innerText = 'Track Shipment';
+    errorDiv.innerHTML = '<span style="color:#ef4444;">Network connection failed.</span>';
   }
+}
+
+function closeModal() {
+    document.getElementById('trackingModal').style.display = 'none';
+    document.body.style.overflow = 'auto'; 
+    if (trackingMap) {
+        trackingMap.remove();
+        trackingMap = null;
+    }
 }
 
 async function loadFooter() {
@@ -69,8 +205,8 @@ async function loadFooter() {
     const data = await res.json();
     
     document.getElementById('footer').innerHTML = `
-      <div style="margin-bottom:8px;">Email Enquiries: <a href="mailto:${data.contactEmail}">${data.contactEmail}</a></div>
-      <div>WhatsApp Support: <a href="https://wa.me/${data.whatsappNumber.replace(/[^0-9]/g,'')}" target="_blank">${data.whatsappNumber}</a></div>
+      <div style="margin-bottom:8px;">Email Enquiries: <a href="mailto:${data.contactEmail}" style="color: #60a5fa;">${data.contactEmail}</a></div>
+      <div>WhatsApp Support: <a href="https://wa.me/${data.whatsappNumber.replace(/[^0-9]/g,'')}" target="_blank" style="color: #60a5fa;">${data.whatsappNumber}</a></div>
     `;
     
     if (data.chatScriptUrl && data.chatScriptUrl.trim() !== '') {

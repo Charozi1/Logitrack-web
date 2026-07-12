@@ -2,16 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Control Dashboard</title>
+  <title>Control Dashboard | LogiTrack</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <div class="container">
     
-    <div class="glass top-bar" style="padding: 20px 30px; margin-bottom: 20px;">
-        <h1 style="margin: 0; font-size: 1.6rem;">Dashboard Control Hub</h1>
-        <button class="logout-btn" onclick="logout()" style="margin: 0;">Logout</button>
+    <div class="glass top-bar" style="padding: 20px 30px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <img src="/logo.png" alt="LogiTrack Logo" style="height: 35px; width: auto; object-fit: contain;" onerror="this.style.display='none'">
+            <h1 style="margin: 0; font-size: 1.6rem; font-weight: 700;">Dashboard Control Hub</h1>
+        </div>
+        <button class="logout-btn" onclick="logout()" style="margin: 0; width: auto; padding: 10px 20px;">Logout</button>
     </div>
 
     <div class="glass">
@@ -26,12 +29,12 @@
           <input type="text" id="shipCustomerName" placeholder="Recipient account identifier">
         </div>
         <div class="form-group">
-          <label>Package Leaving From (Origin Location)</label>
-          <input type="text" id="shipOrigin" placeholder="e.g., Paris Logistics Hub, France">
+          <label>Package Leaving From (Origin)</label>
+          <input type="text" id="shipOrigin" placeholder="e.g., Mexico City">
         </div>
         <div class="form-group">
           <label>Package Final Destination</label>
-          <input type="text" id="shipDestination" placeholder="e.g., Bamenda Terminal, Cameroon">
+          <input type="text" id="shipDestination" placeholder="e.g., Paris">
         </div>
         <div class="form-group">
           <label>Transportation Method</label>
@@ -51,9 +54,13 @@
             <option value="Delivered">✅ Handed Over / Delivered</option>
           </select>
         </div>
-        <div class="form-group" style="grid-column: span 2;">
+        <div class="form-group">
           <label>Current Logged Location Facility</label>
-          <input type="text" id="shipLocation" placeholder="e.g., International Sort Facility Airport Depot">
+          <input type="text" id="shipLocation" placeholder="e.g., Airport Depot">
+        </div>
+        <div class="form-group">
+          <label>Upload Package Photo (Optional)</label>
+          <input type="file" id="shipImage" accept="image/*" style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
         </div>
       </div>
       <button onclick="createShipment()">Save Tracking Entry</button>
@@ -72,7 +79,7 @@
           <input type="text" id="whatsappNumber" placeholder="+1234567890">
         </div>
         <div class="form-group" style="grid-column: span 2;">
-          <label>Tawk.to Chat Widget Embed URL</label>
+          <label>Live Chat Widget Embed URL</label>
           <input type="text" id="chatScriptUrl" placeholder="https://embed.tawk.to/xxxxxxxxxxxxxxxxxxxxxxxx/default">
         </div>
       </div>
@@ -100,7 +107,6 @@
   </div>
 
 <script>
-// Authentication Security Feature added here
 async function logout() {
   try {
     await fetch('/admin/logout', { method: 'POST' });
@@ -143,21 +149,30 @@ async function createShipment() {
   const transitMode = document.getElementById('shipTransitMode').value;
   const status = document.getElementById('shipStatus').value;
   const location = document.getElementById('shipLocation').value.trim();
+  const imageFile = document.getElementById('shipImage').files[0];
 
   if (!trackingNumber || !customerName) {
     alert("Please completely fill out Tracking Code and Customer Name inputs.");
     return;
   }
 
-  const payload = {
-    trackingNumber, customerName, origin, destination, transitMode, status, location,
-    history: [{ status, location }]
-  };
+  const formData = new FormData();
+  formData.append('trackingNumber', trackingNumber);
+  formData.append('customerName', customerName);
+  formData.append('origin', origin);
+  formData.append('destination', destination);
+  formData.append('transitMode', transitMode);
+  formData.append('status', status);
+  formData.append('location', location);
+  formData.append('history', JSON.stringify([{ status, location }]));
+  
+  if (imageFile) {
+    formData.append('packageImage', imageFile);
+  }
 
   const res = await fetch('/admin/shipments', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: formData 
   });
 
   if (res.ok) {
@@ -167,6 +182,7 @@ async function createShipment() {
     document.getElementById('shipOrigin').value = '';
     document.getElementById('shipDestination').value = '';
     document.getElementById('shipLocation').value = '';
+    document.getElementById('shipImage').value = '';
     loadShipments();
     setTimeout(() => document.getElementById('shipmentMsg').innerText = '', 3000);
   } else {
@@ -195,7 +211,7 @@ async function loadShipments() {
         <td>${s.customerName}</td>
         <td><span style="font-size:13px; background:rgba(0,0,0,0.3); padding:6px 10px; border-radius:6px; border: 1px solid rgba(255,255,255,0.1);">${s.status}</span></td>
         <td>${new Date(s.createdAt).toLocaleDateString()}</td>
-        <td><button class="delete-btn" onclick="deleteShipment('${s._id}', '${s.trackingNumber}')">Delete</button></td>
+        <td><button class="delete-btn" onclick="deleteShipment('${s._id}', '${s.trackingNumber}')" style="background:#ef4444; width:auto; padding:5px 10px;">Delete</button></td>
       </tr>
     `;
   });
