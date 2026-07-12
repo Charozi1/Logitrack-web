@@ -4,14 +4,29 @@ const cors = require('cors');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
+const multer = require('multer'); 
+const fs = require('fs'); // Handled for physical file deletions
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ==========================================
-// 1. CORE MIDDLEWARES
-// ==========================================
+// Ensure public/uploads directory exists for incoming images
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Multer Storage Configuration
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, 'public/uploads/'),
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -24,15 +39,11 @@ app.use(session({
     cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// ==========================================
-// 2. MONGOOSE SCHEMAS
-// ==========================================
 const SettingsSchema = new mongoose.Schema({
     contactEmail: { type: String, default: '' },
     whatsappNumber: { type: String, default: '' },
     chatScriptUrl: { type: String, default: '' }
 }, { timestamps: true });
-
 const Settings = mongoose.model('Settings', SettingsSchema);
 
 const ShipmentSchema = new mongoose.Schema({
@@ -43,6 +54,7 @@ const ShipmentSchema = new mongoose.Schema({
     transitMode: { type: String, default: 'By Car / Ground Freight' },
     status: { type: String, default: 'Pending' },
     location: { type: String, default: '' },
+    packageImage: { type: String, default: '' }, 
     history: [
         {
             date: { type: Date, default: Date.now },
@@ -51,12 +63,8 @@ const ShipmentSchema = new mongoose.Schema({
         }
     ]
 }, { timestamps: true });
-
 const Shipment = mongoose.model('Shipment', ShipmentSchema);
 
-// ==========================================
-// 3. AUTHENTICATION GATE
-// ==========================================
 const isAuthenticated = (req, res, next) => {
     if (req.session && req.session.isAdmin) return next();
     return res.status(401).json({ error: "Unauthorized access." });
@@ -66,7 +74,6 @@ app.post('/admin/login', async (req, res) => {
     try {
         const { password } = req.body;
         const hash = process.env.ADMIN_HASH;
-
         if (!hash) return res.status(500).json({ error: "Server misconfiguration." });
 
         const match = await bcrypt.compare(password, hash);
@@ -89,9 +96,6 @@ app.post('/admin/logout', (req, res) => {
     });
 });
 
-// ==========================================
-// 4. PUBLIC API ENDPOINTS
-// ==========================================
 app.get('/settings/public', async (req, res) => {
     try {
         let settings = await Settings.findOne();
@@ -112,9 +116,6 @@ app.get('/track/:num', async (req, res) => {
     }
 });
 
-// ==========================================
-// 5. SECURE ADMIN API ENDPOINTS
-// ==========================================
 app.get('/admin/settings', isAuthenticated, async (req, res) => {
     try {
         let settings = await Settings.findOne();
@@ -137,12 +138,20 @@ app.put('/admin/settings', isAuthenticated, async (req, res) => {
     }
 });
 
-app.post('/admin/shipments', isAuthenticated, async (req, res) => {
+app.post('/admin/shipments', isAuthenticated, upload.single('packageImage'), async (req, res) => {
     try {
         const existing = await Shipment.findOne({ trackingNumber: req.body.trackingNumber });
         if (existing) return res.status(400).json({ error: "Tracking number already exists." });
 
-        const newShipment = new Shipment(req.body);
+        const payload = req.body;
+        if (typeof payload.history === 'string') {
+            payload.history = JSON.parse(payload.history);
+        }
+        if (req.file) {
+            payload.packageImage = '/uploads/' + req.file.filename;
+        }
+
+        const newShipment = new Shipment(payload);
         await newShipment.save();
         return res.sendStatus(200);
     } catch (err) {
@@ -169,8 +178,24 @@ app.get('/admin/shipments', isAuthenticated, async (req, res) => {
     }
 });
 
+// UPGRADED DELETE ROUTE: Cleans up local directory storage automatically
 app.delete('/admin/shipments/:id', isAuthenticated, async (req, res) => {
     try {
+        // 1. Locate target document in MongoDB first to check for image references
+        const shipment = await Shipment.findById(req.params.id);
+        if (!shipment) return res.status(404).json({ error: "Shipment record not found." });
+
+        // 2. If packageImage exists, attempt to wipe it out of hard storage
+        if (shipment.packageImage && shipment.packageImage.trim() !== '') {
+            // Reconstruct the file path: /uploads/file.png -> ./public/uploads/file.png
+            const relativePath = path.join(__dirname, 'public', shipment.packageImage);
+            
+            if (fs.existsSync(relativePath)) {
+                fs.unlinkSync(relativePath); // Permanently delete the file
+            }
+        }
+
+        // 3. Drop the database entry cleanly
         await Shipment.findByIdAndDelete(req.params.id);
         return res.sendStatus(200);
     } catch (err) {
@@ -178,9 +203,6 @@ app.delete('/admin/shipments/:id', isAuthenticated, async (req, res) => {
     }
 });
 
-// ==========================================
-// 6. FRONTEND ROUTING
-// ==========================================
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
@@ -192,14 +214,10 @@ app.get('/admin/shipments-page', (req, res) => {
     return res.redirect('/admin');
 });
 
-// Regex catch-all prevents PathError crashes
 app.get('('*')', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ==========================================
-// 7. BOOTSTRAP
-// ==========================================
 mongoose.connect(process.env.MONGO_URI)
     .then(() => {
         console.log("🚀 Connection to cloud MongoDB Atlas instance established.");
